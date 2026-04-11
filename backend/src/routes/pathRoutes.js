@@ -5,7 +5,6 @@ import { findShortestPathToNearestExit } from "../utils/pathFinder.js";
 
 const router = express.Router();
 
-// GET /api/path?start=NODE_ID
 router.get("/", async (req, res) => {
   try {
     const startNodeId = req.query.start;
