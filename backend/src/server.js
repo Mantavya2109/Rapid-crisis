@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
 import fireRoutes from "./routes/fireRoutes.js";
 import pathRoutes from "./routes/pathRoutes.js";
+import buildingRoutes from "./routes/buildingRoutes.js";
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.get("/api/test", (req, res) => {
 // router middleware
 app.use("/api/fire", fireRoutes);
 app.use("/api/path", pathRoutes);
+app.use("/api/building", buildingRoutes);
 
 // server
 const PORT = process.env.PORT || 5000;
