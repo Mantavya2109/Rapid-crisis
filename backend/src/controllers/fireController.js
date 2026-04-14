@@ -1,4 +1,5 @@
 import { findShortestPathToNearestExit } from "../utils/pathFinder.js";
+import { getSensorNodes } from "./buildingController.js";
 
 const blockedNodes = [];
 
@@ -13,6 +14,11 @@ export const handleFireAlert = (req, res) => {
 
   if (!nodeId) {
     return res.status(400).json({ message: "nodeId is required" });
+  }
+
+  const sensorNodes = getSensorNodes();
+  if (!sensorNodes.includes(nodeId)) {
+    return res.status(400).json({ message: "No sensor at this location" });
   }
 
   if (!blockedNodes.includes(nodeId)) {

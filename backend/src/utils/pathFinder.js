@@ -15,10 +15,32 @@ export const findShortestPathToNearestExit = (
   const blocked =
     blockedNodes instanceof Set ? blockedNodes : new Set(blockedNodes);
 
-  if (!startNodeId || blocked.has(startNodeId)) return [];
+  if (!startNodeId) return [];
+
+  let effectiveStartNodeId = startNodeId;
+  if (blocked.has(startNodeId)) {
+    const neighborSet = new Set();
+
+    for (const edge of edges) {
+      if (!edge) continue;
+      const from = edge.from;
+      const to = edge.to;
+      if (!from || !to) continue;
+
+      if (from === startNodeId) neighborSet.add(to);
+      else if (to === startNodeId) neighborSet.add(from);
+    }
+
+    const safeNeighbors = Array.from(neighborSet).filter(
+      (id) => id && !blocked.has(id),
+    );
+
+    if (safeNeighbors.length === 0) return [];
+    effectiveStartNodeId = safeNeighbors[0];
+  }
 
   const isExit = (nodeId) => String(nodeId).toUpperCase().includes("EXIT");
-  if (isExit(startNodeId)) return [startNodeId];
+  if (isExit(effectiveStartNodeId)) return [effectiveStartNodeId];
 
   // Build adjacency list (treat edges as bidirectional for BFS)
   const adjacency = new Map();
@@ -38,8 +60,8 @@ export const findShortestPathToNearestExit = (
   }
 
   // BFS
-  const queue = [startNodeId];
-  const visited = new Set([startNodeId]);
+  const queue = [effectiveStartNodeId];
+  const visited = new Set([effectiveStartNodeId]);
   const parent = new Map();
 
   for (let i = 0; i < queue.length; i++) {
@@ -58,7 +80,7 @@ export const findShortestPathToNearestExit = (
         let node = next;
         while (node !== undefined) {
           path.push(node);
-          if (node === startNodeId) break;
+          if (node === effectiveStartNodeId) break;
           node = parent.get(node);
         }
         return path.reverse();

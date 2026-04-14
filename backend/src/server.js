@@ -10,7 +10,6 @@ dotenv.config();
 
 const app = express();
 
-// middleware
 app.use(cors());
 app.use(express.json());
 
@@ -24,11 +23,10 @@ app.get("/api/test", (req, res) => {
 });
 
 // router middleware
-app.use("/api/fire", fireRoutes);
-app.use("/api/path", pathRoutes);
-app.use("/api/building", buildingRoutes);
+app.use("/api/fire", fireRoutes);  // Piyush
+app.use("/api/path", pathRoutes);  // user guidance
+app.use("/api/building", buildingRoutes);  // Naman
 
-// server
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
