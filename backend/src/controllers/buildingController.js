@@ -21,20 +21,31 @@ export const saveBuildingAndFindPath = async (req, res) => {
       });
     }
 
-    if (sensors !== undefined && !Array.isArray(sensors)) {
-      return res
-        .status(400)
-        .json({ message: "sensors must be an array of node IDs" });
-    }
+    const deleteAllDocumentsInCollection = async (collectionName) => {
+      const snapshot = await firestore.collection(collectionName).get();
+      const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+      await Promise.all(deletePromises);
+    };
+
+    await Promise.all([
+      deleteAllDocumentsInCollection("nodes"),
+      deleteAllDocumentsInCollection("edges"),
+    ]);
 
     const invalidNode = nodes.find(
-      (n) => !n || n.id === undefined || n.id === null,
+      (n) => n?.id === undefined || n?.id === null,
     );
     if (invalidNode) {
       return res.status(400).json({
         message:
           "Each node must include an 'id' field for Firestore document IDs",
       });
+    }
+
+    const nodeIds = nodes.map((n) => String(n.id));
+    const normalizedStartId = String(startId);
+    if (!nodeIds.includes(normalizedStartId)) {
+      return res.status(400).json({ message: "Start node not found in nodes" });
     }
 
     await Promise.all(
@@ -47,7 +58,9 @@ export const saveBuildingAndFindPath = async (req, res) => {
       edges.map((edge) => firestore.collection("edges").add(edge)),
     );
 
-    sensorNodes = sensors || [];
+    if (Array.isArray(sensors)) {
+      sensorNodes = sensors;
+    }
 
     const edgesForPath = edges
       .filter((e) => e && e.from && e.to)
@@ -55,15 +68,17 @@ export const saveBuildingAndFindPath = async (req, res) => {
 
     const blockedNodes = [];
     const path = findShortestPathToNearestExit(
-      startId,
+      normalizedStartId,
       edgesForPath,
       blockedNodes,
     );
 
     return res.json({
-      savedNodesCount: nodes.length,
-      savedEdgesCount: edges.length,
-      path,
+      message: "Building data saved",
+      nodesSaved: nodes.length,
+      edgesSaved: edges.length,
+      safePath: path,
+      status: "OK",
     });
   } catch (error) {
     return res.status(500).json({ message: error.message || "Server error" });
