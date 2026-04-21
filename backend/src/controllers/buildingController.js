@@ -1,5 +1,3 @@
-import Node from "../models/Node.js";
-import Edge from "../models/Edge.js";
 import { findShortestPathToNearestExit } from "../utils/pathFinder.js";
 
 let sensorNodes = [];
@@ -10,6 +8,8 @@ export function getSensorNodes() {
 
 export const saveBuildingAndFindPath = async (req, res) => {
   try {
+    const { default: firestore } = await import("../../config/firebase.js");
+
     const { nodes, edges, sensors, start, startNode, startNodeId } =
       req.body || {};
     const startId = startNodeId || startNode || start;
@@ -27,10 +27,25 @@ export const saveBuildingAndFindPath = async (req, res) => {
         .json({ message: "sensors must be an array of node IDs" });
     }
 
-    await Node.deleteMany({});
-    await Edge.deleteMany({});
-    const savedNodes = await Node.insertMany(nodes);
-    const savedEdges = await Edge.insertMany(edges);
+    const invalidNode = nodes.find(
+      (n) => !n || n.id === undefined || n.id === null,
+    );
+    if (invalidNode) {
+      return res.status(400).json({
+        message:
+          "Each node must include an 'id' field for Firestore document IDs",
+      });
+    }
+
+    await Promise.all(
+      nodes.map((node) =>
+        firestore.collection("nodes").doc(String(node.id)).set(node),
+      ),
+    );
+
+    await Promise.all(
+      edges.map((edge) => firestore.collection("edges").add(edge)),
+    );
 
     sensorNodes = sensors || [];
 
@@ -46,8 +61,8 @@ export const saveBuildingAndFindPath = async (req, res) => {
     );
 
     return res.json({
-      savedNodesCount: savedNodes.length,
-      savedEdgesCount: savedEdges.length,
+      savedNodesCount: nodes.length,
+      savedEdgesCount: edges.length,
       path,
     });
   } catch (error) {

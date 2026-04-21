@@ -1,9 +1,28 @@
 import express from "express";
-import Edge from "../models/Edge.js";
 import { getBlockedNodes } from "../controllers/fireController.js";
 import { findShortestPathToNearestExit } from "../utils/pathFinder.js";
 
 const router = express.Router();
+
+const fetchEdgesFromFirestore = async () => {
+  const { default: firestore } = await import("../../config/firebase.js");
+  const snapshot = await firestore.collection("edges").get();
+
+  return snapshot.docs
+    .map((doc) => doc.data())
+    .filter((e) => e && e.from !== undefined && e.to !== undefined)
+    .map((e) => ({ from: e.from, to: e.to }));
+};
+
+// Returns: [{ from, to }, ...]
+router.get("/edges", async (req, res) => {
+  try {
+    const edges = await fetchEdgesFromFirestore();
+    return res.json(edges);
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+});
 
 router.get("/", async (req, res) => {
   try {
@@ -13,8 +32,7 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ message: "start query param is required" });
     }
 
-    const edgesFromDb = await Edge.find({}, { from: 1, to: 1, _id: 0 }).lean();
-    const edges = edgesFromDb.map((e) => ({ from: e.from, to: e.to }));
+    const edges = await fetchEdgesFromFirestore();
 
     const blockedNodes = getBlockedNodes();
     const path = findShortestPathToNearestExit(
