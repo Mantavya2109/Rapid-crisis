@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { connectDB } from "./config/db.js";
 import fireRoutes from "./routes/fireRoutes.js";
 import pathRoutes from "./routes/pathRoutes.js";
 import buildingRoutes from "./routes/buildingRoutes.js";
+import db from "../config/firebase.js";
 
 dotenv.config();
 
@@ -30,9 +30,9 @@ app.use("/api/building", buildingRoutes);  // Naman
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-  await connectDB();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log("Firestore instance:", typeof db);
   });
 };
 
