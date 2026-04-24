@@ -1,0 +1,110 @@
+.bview-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 28px 20px 20px;
+  gap: 20px;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.bview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.bview-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.bview-building-id {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.06em;
+}
+
+.bview-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Stats Row ────────────────────────────────────────────── */
+.bview-stats {
+  display: flex;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.bview-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--border);
+  transition: background var(--transition-fast);
+}
+.bview-stat:last-child { border-right: none; }
+.bview-stat:hover { background: var(--bg-card-hover); }
+
+.bview-stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent-amber);
+}
+
+.bview-stat-label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Canvas Wrap ──────────────────────────────────────────── */
+.bview-canvas-wrap {
+  flex: 1;
+  min-height: 440px;
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  background-image:
+    linear-gradient(rgba(42,47,58,0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42,47,58,0.3) 1px, transparent 1px);
+  background-size: 68px 68px;
+}
+
+/* ── States ───────────────────────────────────────────────── */
+.bview-loading,
+.bview-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 80px 0;
+}
+
+.bview-error { color: var(--accent-red); }

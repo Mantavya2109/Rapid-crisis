@@ -1,0 +1,82 @@
+.alert-banner {
+  background: linear-gradient(90deg, rgba(239,68,68,0.2) 0%, rgba(220,38,38,0.1) 100%);
+  border-bottom: 2px solid var(--accent-red);
+  animation: slide-in-banner 400ms ease;
+  position: relative;
+  z-index: 90;
+}
+
+.alert-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(239,68,68,0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+.alert-banner-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.alert-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.alert-fire-icon {
+  font-size: 1.8rem;
+  animation: fire-flicker 0.8s infinite;
+  display: inline-block;
+}
+
+.alert-banner-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent-red);
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.alert-banner-sub {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.alert-banner-sub strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.alert-clear-btn {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: var(--radius-md);
+  color: var(--accent-red);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.alert-clear-btn:hover {
+  background: rgba(239,68,68,0.25);
+  box-shadow: var(--shadow-glow-red);
+}
