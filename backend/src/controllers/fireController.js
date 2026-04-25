@@ -32,11 +32,13 @@
  */
 
 import { bus } from "../services/eventBus.js";
+import { safeAnalyzeEvent } from "../services/aiService.js";
 import {
   computeAllRiskScores,
   riskScoresToHazardWeights,
   registerFireNode,
   clearFireNode,
+  pickNearestExit,
 } from "../services/aiHazardEngine.js";
 import {
   recordExitUsage,
@@ -58,40 +60,71 @@ export const handleFireAlert = async (req, res) => {
   const {
     buildingId,
     blocked_nodes = [],
-    startNodes    = [],
-    sensor_data   = {},
+    startNodes = [],
+    sensor_data = {},
   } = req.body || {};
 
-  if (!buildingId)                  return res.status(400).json({ message: "buildingId is required." });
-  if (!startNodes.length)           return res.status(400).json({ message: "startNodes is required." });
+  if (!buildingId)
+    return res.status(400).json({ message: "buildingId is required." });
+  if (!startNodes.length)
+    return res.status(400).json({ message: "startNodes is required." });
 
   // ── 1. Update blocked list + AI fire registry ───────────────────────
-  blocked_nodes.forEach((n) => { _blockedNodes.add(n); registerFireNode(n); });
-  startNodes.forEach((n)    => { _blockedNodes.add(n); registerFireNode(n); });
+  blocked_nodes.forEach((n) => {
+    _blockedNodes.add(n);
+    registerFireNode(n);
+  });
+  startNodes.forEach((n) => {
+    _blockedNodes.add(n);
+    registerFireNode(n);
+  });
 
   // ── 2. Update node state cache from incoming sensor data ────────────
   startNodes.forEach((nodeId) => {
     _nodeStateCache.set(nodeId, {
       nodeId,
-      temperature:  sensor_data.temperature ?? 0,
-      smoke:        sensor_data.smoke       ?? 0,
+      temperature: sensor_data.temperature ?? 0,
+      smoke: sensor_data.smoke ?? 0,
       smokeRiseRate: 0,
-      tempRiseRate:  0,
-      status:       sensor_data.status      ?? "FIRE",
+      tempRiseRate: 0,
+      status: sensor_data.status ?? "FIRE",
     });
   });
 
+  // ── AI input (from request payload) ───────────────────────────────
+  const temperature = req.body?.sensor_data?.temperature;
+  const smoke = req.body?.sensor_data?.smoke;
+  const node = req.body?.startNodes?.[0];
+  const blockedNodes = req.body?.blocked_nodes;
+
+  const eventData = {
+    temperature,
+    smoke,
+    node,
+    blockedNodes,
+  };
+
   // ── 3. Run AI hazard engine on entire building ─────────────────────
   const nodeStates = Object.fromEntries(_nodeStateCache);
-  const adjacency  = await _fetchAdjacency(buildingId);
+  const adjacency = await _fetchAdjacency(buildingId);
+  const edges = await _fetchEdges(buildingId);
 
-  const riskScores    = computeAllRiskScores({ nodeStates, adjacency });
+  const riskScores = computeAllRiskScores({ nodeStates, adjacency });
   const hazardWeights = riskScoresToHazardWeights(riskScores);
 
   // ── 4. Evacuation optimizer — detect overloaded exits ─────────────
   // We don't know specific exits per path yet, so record nodes against
   // all exits they might flow toward (optimizer picks up from here)
-  recordExitUsage(startNodes, _nearestExitHint(adjacency, startNodes[0]));
+  const nearestExit = pickNearestExit({
+    startNodeId: startNodes[0],
+    edges,
+    blockedNodes: _blockedNodes,
+  });
+
+  recordExitUsage(
+    startNodes,
+    nearestExit ?? _nearestExitHint(adjacency, startNodes[0]),
+  );
   const evacuationHints = getOptimizationHints();
 
   // Merge exit penalties into hazard weights
@@ -115,14 +148,23 @@ export const handleFireAlert = async (req, res) => {
     evacuationHints,
   }).catch((e) => console.error("[Fire] Firestore write error:", e.message));
 
+  // Await ONLY for the response payload (main logic already complete)
+  let aiInsight = null;
+  try {
+    aiInsight = await safeAnalyzeEvent(eventData);
+  } catch {
+    aiInsight = null;
+  }
+
   // ── 7. Respond to Pi ───────────────────────────────────────────────
   return res.json({
-    status:           "ACK",
-    hazard_weights:   hazardWeights,   // Pi merges these into Dijkstra
-    risk_scores:      riskScores,      // for dashboard display
+    status: "ACK",
+    hazard_weights: hazardWeights, // Pi merges these into Dijkstra
+    risk_scores: riskScores, // for dashboard display
     evacuation_hints: evacuationHints, // Pi adds exit penalties to graph
-    global_blocked:   Array.from(_blockedNodes),
-    timestamp:        new Date().toISOString(),
+    global_blocked: Array.from(_blockedNodes),
+    aiInsight: aiInsight || "AI skipped (rate limit)",
+    timestamp: new Date().toISOString(),
   });
 };
 
@@ -132,7 +174,8 @@ export const handleFireAlert = async (req, res) => {
 
 export const clearFireState = async (req, res) => {
   const { buildingId } = req.body || {};
-  if (!buildingId) return res.status(400).json({ message: "buildingId is required." });
+  if (!buildingId)
+    return res.status(400).json({ message: "buildingId is required." });
 
   // Clear all fire state
   [..._blockedNodes].forEach((n) => clearFireNode(n));
@@ -143,7 +186,7 @@ export const clearFireState = async (req, res) => {
   bus.fire("fire:cleared", { buildingId });
 
   _persistClear(buildingId).catch((e) =>
-    console.error("[Fire] Failed to clear Firestore state:", e.message)
+    console.error("[Fire] Failed to clear Firestore state:", e.message),
   );
 
   return res.json({ status: "CLEARED", buildingId });
@@ -156,9 +199,13 @@ export const clearFireState = async (req, res) => {
 export const getFireState = async (req, res) => {
   try {
     const { default: db } = await import("../../config/firebase.js");
-    const { buildingId }  = req.params;
+    const { buildingId } = req.params;
     const doc = await db.collection("buildings").doc(buildingId).get();
-    return res.json(doc.exists ? doc.data() : { buildingId, activeEvacuation: false, blockedNodes: [] });
+    return res.json(
+      doc.exists
+        ? doc.data()
+        : { buildingId, activeEvacuation: false, blockedNodes: [] },
+    );
   } catch (e) {
     return res.status(500).json({ message: e.message });
   }
@@ -181,6 +228,8 @@ export function updateNodeStateCache(nodeId, state) {
 
 /** In-memory adjacency cache { buildingId → adjacency } */
 const _adjCache = new Map();
+/** In-memory edges cache { buildingId → edges[] } */
+const _edgeCache = new Map();
 
 async function _fetchAdjacency(buildingId) {
   if (_adjCache.has(buildingId)) return _adjCache.get(buildingId);
@@ -193,7 +242,7 @@ async function _fetchAdjacency(buildingId) {
       const { from, to } = doc.data();
       if (!from || !to) return;
       if (!adj[from]) adj[from] = [];
-      if (!adj[to])   adj[to]   = [];
+      if (!adj[to]) adj[to] = [];
       adj[from].push(to);
       adj[to].push(from);
     });
@@ -201,6 +250,24 @@ async function _fetchAdjacency(buildingId) {
     return adj;
   } catch {
     return {};
+  }
+}
+
+async function _fetchEdges(buildingId) {
+  if (_edgeCache.has(buildingId)) return _edgeCache.get(buildingId);
+
+  try {
+    const { default: db } = await import("../../config/firebase.js");
+    const edgeSnap = await db.collection(`buildings/${buildingId}/edges`).get();
+    const edges = edgeSnap.docs
+      .map((d) => d.data())
+      .filter((e) => e && e.from !== undefined && e.to !== undefined)
+      .map((e) => ({ from: e.from, to: e.to, distance: e.distance }));
+
+    _edgeCache.set(buildingId, edges);
+    return edges;
+  } catch {
+    return [];
   }
 }
 
@@ -213,18 +280,30 @@ function _nearestExitHint(adjacency, startNode) {
 
 async function _persistFireEvent(buildingId, data) {
   const { default: db } = await import("../../config/firebase.js");
-  const ref = db.collection("buildings").doc(buildingId).collection("fire_events").doc();
+  const ref = db
+    .collection("buildings")
+    .doc(buildingId)
+    .collection("fire_events")
+    .doc();
   await ref.set({ id: ref.id, ...data, timestamp: new Date().toISOString() });
   await db.collection("buildings").doc(buildingId).set(
-    { activeEvacuation: true, blockedNodes: data.blockedNodes, updatedAt: new Date().toISOString() },
-    { merge: true }
+    {
+      activeEvacuation: true,
+      blockedNodes: data.blockedNodes,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
   );
 }
 
 async function _persistClear(buildingId) {
   const { default: db } = await import("../../config/firebase.js");
   await db.collection("buildings").doc(buildingId).set(
-    { activeEvacuation: false, blockedNodes: [], updatedAt: new Date().toISOString() },
-    { merge: true }
+    {
+      activeEvacuation: false,
+      blockedNodes: [],
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
   );
 }

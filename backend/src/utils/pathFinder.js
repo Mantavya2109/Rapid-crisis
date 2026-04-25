@@ -3,7 +3,7 @@
  * Exit nodes are identified by having "EXIT" in their id.
  *
  * @param {string} startNodeId
- * @param {Array<{from: string, to: string}>} edges
+ * @param {Array<{from: string, to: string, distance?: number}>} edges
  * @param {string[]|Set<string>} blockedNodes
  * @returns {string[]} Path as an array of node ids (empty if no path found)
  */
@@ -42,12 +42,13 @@ export const findShortestPathToNearestExit = (
   const isExit = (nodeId) => String(nodeId).toUpperCase().includes("EXIT");
   if (isExit(effectiveStartNodeId)) return [effectiveStartNodeId];
 
-  // Build adjacency list (treat edges as bidirectional for BFS)
+  // Build weighted adjacency list (treat edges as bidirectional)
+  // distance defaults to 1 when missing.
   const adjacency = new Map();
-  const addNeighbor = (a, b) => {
+  const addNeighbor = (a, b, w) => {
     if (blocked.has(a) || blocked.has(b)) return;
     if (!adjacency.has(a)) adjacency.set(a, []);
-    adjacency.get(a).push(b);
+    adjacency.get(a).push({ to: b, w });
   };
 
   for (const edge of edges) {
@@ -55,38 +56,59 @@ export const findShortestPathToNearestExit = (
     const from = edge.from;
     const to = edge.to;
     if (!from || !to) continue;
-    addNeighbor(from, to);
-    addNeighbor(to, from);
+
+    const rawW = edge.distance ?? 1;
+    const w =
+      Number.isFinite(Number(rawW)) && Number(rawW) > 0 ? Number(rawW) : 1;
+
+    addNeighbor(from, to, w);
+    addNeighbor(to, from, w);
   }
 
-  // BFS
-  const queue = [effectiveStartNodeId];
-  const visited = new Set([effectiveStartNodeId]);
-  const parent = new Map();
+  // Dijkstra (simple array-based priority queue for small graphs)
+  const dist = new Map();
+  const prev = new Map();
+  const visited = new Set();
 
-  for (let i = 0; i < queue.length; i++) {
-    const current = queue[i];
-    const neighbors = adjacency.get(current) || [];
+  dist.set(effectiveStartNodeId, 0);
 
-    for (const next of neighbors) {
-      if (blocked.has(next) || visited.has(next)) continue;
+  /** @type {Array<{ id: string, d: number }>} */
+  const pq = [{ id: effectiveStartNodeId, d: 0 }];
 
-      visited.add(next);
-      parent.set(next, current);
+  while (pq.length > 0) {
+    // Extract min
+    let minIdx = 0;
+    for (let i = 1; i < pq.length; i++) {
+      if (pq[i].d < pq[minIdx].d) minIdx = i;
+    }
+    const [{ id: current, d: currentDist }] = pq.splice(minIdx, 1);
 
-      if (isExit(next)) {
-        // Reconstruct path: next -> ... -> startNodeId
-        const path = [];
-        let node = next;
-        while (node !== undefined) {
-          path.push(node);
-          if (node === effectiveStartNodeId) break;
-          node = parent.get(node);
-        }
-        return path.reverse();
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    // First exit popped is guaranteed shortest by total distance
+    if (current !== effectiveStartNodeId && isExit(current)) {
+      const path = [];
+      let node = current;
+      while (node !== undefined) {
+        path.push(node);
+        if (node === effectiveStartNodeId) break;
+        node = prev.get(node);
       }
+      return path.reverse();
+    }
 
-      queue.push(next);
+    const neighbors = adjacency.get(current) || [];
+    for (const { to: next, w } of neighbors) {
+      if (!next || blocked.has(next) || visited.has(next)) continue;
+
+      const nextDist = currentDist + w;
+      const best = dist.get(next);
+      if (best === undefined || nextDist < best) {
+        dist.set(next, nextDist);
+        prev.set(next, current);
+        pq.push({ id: next, d: nextDist });
+      }
     }
   }
 
