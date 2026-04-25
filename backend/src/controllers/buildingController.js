@@ -41,20 +41,40 @@ export const setupBuilding = async (req, res) => {
   try {
     const { default: db } = await import("../../config/firebase.js");
 
-    const { buildingId, nodes, edges, sensors } = req.body || {};
+    const { buildingId, nodes, edges, sensors, start } = req.body || {};
 
     if (!buildingId || !Array.isArray(nodes) || !Array.isArray(edges)) {
       return res.status(400).json({
-        message: "Request body must include buildingId, nodes (array), and edges (array).",
+        message:
+          "Request body must include buildingId, nodes (array), and edges (array).",
       });
     }
 
-    const invalidNode = nodes.find((n) => n?.id === undefined || n?.id === null);
+    const invalidNode = nodes.find(
+      (n) => n?.id === undefined || n?.id === null,
+    );
     if (invalidNode) {
       return res.status(400).json({
         message: "Each node must have an 'id' field.",
       });
     }
+
+    const invalidEdge = edges.find(
+      (e) =>
+        e?.from === undefined ||
+        e?.from === null ||
+        e?.to === undefined ||
+        e?.to === null,
+    );
+    if (invalidEdge) {
+      return res.status(400).json({
+        message: "Each edge must have 'from' and 'to' fields.",
+      });
+    }
+
+    // ── REPLACE semantics ────────────────────────────────────────────
+    // Delete the existing building doc first (no-op if it doesn't exist).
+    await db.collection("buildings").doc(buildingId).delete();
 
     // ── Wipe previous graph for this building ─────────────────────────
     const deleteCollection = async (collectionName) => {
@@ -73,27 +93,32 @@ export const setupBuilding = async (req, res) => {
         db
           .collection(`buildings/${buildingId}/nodes`)
           .doc(String(node.id))
-          .set({ ...node, buildingId })
-      )
+          .set({ ...node, buildingId }),
+      ),
     );
 
     // ── Persist edges ─────────────────────────────────────────────────
     await Promise.all(
       edges.map((edge) =>
-        db.collection(`buildings/${buildingId}/edges`).add({ ...edge, buildingId })
-      )
+        db.collection(`buildings/${buildingId}/edges`).add({
+          ...edge,
+          distance: edge?.distance ?? 1,
+          buildingId,
+        }),
+      ),
     );
 
     // ── Update building meta document ─────────────────────────────────
-    await db.collection("buildings").doc(buildingId).set(
-      {
+    await db
+      .collection("buildings")
+      .doc(buildingId)
+      .set({
         buildingId,
         nodeCount: nodes.length,
         edgeCount: edges.length,
+        ...(start !== undefined ? { start } : {}),
         updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+      });
 
     // ── Update in-memory sensor node list ─────────────────────────────
     if (Array.isArray(sensors)) {
@@ -101,19 +126,19 @@ export const setupBuilding = async (req, res) => {
     }
 
     console.log(
-      `[Building] Saved ${nodes.length} nodes + ${edges.length} edges for building "${buildingId}"`
+      `[Building] Saved ${nodes.length} nodes + ${edges.length} edges for building "${buildingId}"`,
     );
 
     return res.status(201).json({
-      message: "Building graph saved successfully.",
+      message: "Building graph replaced successfully.",
       buildingId,
-      nodesSaved: nodes.length,
-      edgesSaved: edges.length,
       status: "OK",
     });
   } catch (error) {
     console.error("[Building] Error saving building:", error);
-    return res.status(500).json({ message: error.message || "Internal server error." });
+    return res
+      .status(500)
+      .json({ message: error.message || "Internal server error." });
   }
 };
 
@@ -141,6 +166,8 @@ export const getBuilding = async (req, res) => {
     return res.json({ buildingId, nodes, edges });
   } catch (error) {
     console.error("[Building] Error fetching building:", error);
-    return res.status(500).json({ message: error.message || "Internal server error." });
+    return res
+      .status(500)
+      .json({ message: error.message || "Internal server error." });
   }
 };

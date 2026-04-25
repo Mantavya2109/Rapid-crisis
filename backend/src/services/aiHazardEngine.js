@@ -33,16 +33,18 @@
  *   time:     0.05   (temporal growth)
  */
 
+import { findShortestPathToNearestExit } from "../utils/pathFinder.js";
+
 // ── Tunable constants ─────────────────────────────────────────────────
-const CRITICAL_TEMP_C      = 65.0;   // °C — maps to risk ≈ 1.0
-const WARN_TEMP_C          = 40.0;   // °C — sigmoid mid-point
-const CRITICAL_SMOKE_PPM   = 600.0;  // ppm — linear ceiling
-const MAX_RISE_RATE        = 30.0;   // °C or ppm / min to risk 1.0
-const SPREAD_COEFF         = 0.55;   // how strongly fire propagates to neighbors
-const TIME_LAMBDA          = 0.15;   // controls how fast time_factor grows
+const CRITICAL_TEMP_C = 65.0; // °C — maps to risk ≈ 1.0
+const WARN_TEMP_C = 40.0; // °C — sigmoid mid-point
+const CRITICAL_SMOKE_PPM = 600.0; // ppm — linear ceiling
+const MAX_RISE_RATE = 30.0; // °C or ppm / min to risk 1.0
+const SPREAD_COEFF = 0.55; // how strongly fire propagates to neighbors
+const TIME_LAMBDA = 0.15; // controls how fast time_factor grows
 
 // ── Weights (must sum to 1.0) ─────────────────────────────────────────
-const W = { temp: 0.30, smoke: 0.30, rise: 0.20, neighbor: 0.15, time: 0.05 };
+const W = { temp: 0.3, smoke: 0.3, rise: 0.2, neighbor: 0.15, time: 0.05 };
 
 // ── Per-node alert registry (used for time_factor) ────────────────────
 // { nodeId → firstAlertTs (ms) }
@@ -93,7 +95,11 @@ export function computeAllRiskScores({ nodeStates, adjacency }) {
   const rawScores = {};
 
   for (const [nodeId, state] of Object.entries(nodeStates)) {
-    rawScores[nodeId] = _scoreNode(nodeId, state, 0 /* no neighbor influence yet */);
+    rawScores[nodeId] = _scoreNode(
+      nodeId,
+      state,
+      0 /* no neighbor influence yet */,
+    );
   }
 
   // ── Second pass: blend in neighbour influence ─────────────────────
@@ -101,10 +107,10 @@ export function computeAllRiskScores({ nodeStates, adjacency }) {
   const finalScores = {};
 
   for (const [nodeId, state] of Object.entries(nodeStates)) {
-    const neighbors      = adjacency[nodeId] ?? [];
+    const neighbors = adjacency[nodeId] ?? [];
     const maxNeighborRisk = neighbors.reduce(
       (max, nid) => Math.max(max, rawScores[nid] ?? 0),
-      0
+      0,
     );
     finalScores[nodeId] = _scoreNode(nodeId, state, maxNeighborRisk);
   }
@@ -131,6 +137,29 @@ export function riskScoresToHazardWeights(riskScores) {
   return weights;
 }
 
+/**
+ * Pick the nearest exit for a given start node using weighted shortest path.
+ * This supports graphs where edges have an optional `distance` (defaults to 1).
+ *
+ * Kept as a small helper so callers can stay backward-compatible.
+ *
+ * @param {{
+ *  startNodeId: string,
+ *  edges: Array<{from: string, to: string, distance?: number}>,
+ *  blockedNodes?: string[]|Set<string>
+ * }} params
+ * @returns {string|null} exit node id, or null if no safe exit path
+ */
+export function pickNearestExit({
+  startNodeId,
+  edges = [],
+  blockedNodes = [],
+}) {
+  const path = findShortestPathToNearestExit(startNodeId, edges, blockedNodes);
+  if (!path || path.length === 0) return null;
+  return path[path.length - 1] ?? null;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────
@@ -153,12 +182,25 @@ function _clamp(v, lo, hi) {
  * @returns {number}  risk 0.0–1.0
  */
 function _scoreNode(nodeId, state, maxNeighborRisk) {
-  const { temperature = 0, smoke = 0, smokeRiseRate = 0, tempRiseRate = 0 } = state;
+  const {
+    temperature = 0,
+    smoke = 0,
+    smokeRiseRate = 0,
+    tempRiseRate = 0,
+  } = state;
 
   // ── Individual factors ──────────────────────────────────────────────
-  const temp_factor   = _sigmoid(temperature, WARN_TEMP_C, (CRITICAL_TEMP_C - WARN_TEMP_C) / 4);
-  const smoke_factor  = _clamp(smoke / CRITICAL_SMOKE_PPM, 0, 1);
-  const rise_factor   = _clamp(Math.max(smokeRiseRate, tempRiseRate) / MAX_RISE_RATE, 0, 1);
+  const temp_factor = _sigmoid(
+    temperature,
+    WARN_TEMP_C,
+    (CRITICAL_TEMP_C - WARN_TEMP_C) / 4,
+  );
+  const smoke_factor = _clamp(smoke / CRITICAL_SMOKE_PPM, 0, 1);
+  const rise_factor = _clamp(
+    Math.max(smokeRiseRate, tempRiseRate) / MAX_RISE_RATE,
+    0,
+    1,
+  );
   const neighbor_factor = maxNeighborRisk * SPREAD_COEFF;
 
   // ── Time factor (grows as fire ages at this node) ──────────────────
@@ -169,13 +211,12 @@ function _scoreNode(nodeId, state, maxNeighborRisk) {
     time_factor = 1 - Math.exp(-TIME_LAMBDA * elapsedMin);
   }
 
-  const raw = (
-    W.temp     * temp_factor    +
-    W.smoke    * smoke_factor   +
-    W.rise     * rise_factor    +
+  const raw =
+    W.temp * temp_factor +
+    W.smoke * smoke_factor +
+    W.rise * rise_factor +
     W.neighbor * neighbor_factor +
-    W.time     * time_factor
-  );
+    W.time * time_factor;
 
   return parseFloat(_clamp(raw, 0, 1).toFixed(4));
 }
