@@ -1,0 +1,58 @@
+{
+  "buildingId": "BUILDING_01",
+  "buildingName": "Main Office Block",
+
+  "graph": {
+    "ROOM_101":   ["HALLWAY_A"],
+    "ROOM_102":   ["HALLWAY_A"],
+    "ROOM_201":   ["HALLWAY_B"],
+    "ROOM_202":   ["HALLWAY_B"],
+    "HALLWAY_A":  ["HALLWAY_B", "STAIRCASE"],
+    "HALLWAY_B":  ["HALLWAY_A", "EXIT_NORTH"],
+    "STAIRCASE":  ["EXIT_SOUTH"],
+    "EXIT_NORTH": [],
+    "EXIT_SOUTH": []
+  },
+
+  "exits": ["EXIT_NORTH", "EXIT_SOUTH"],
+
+  "edge_weights": {
+    "ROOM_101":   1.0,
+    "ROOM_102":   1.0,
+    "ROOM_201":   1.0,
+    "ROOM_202":   1.0,
+    "HALLWAY_A":  1.5,
+    "HALLWAY_B":  1.5,
+    "STAIRCASE":  2.0,
+    "EXIT_NORTH": 0.1,
+    "EXIT_SOUTH": 0.1
+  },
+
+  "directions": {
+    "ROOM_101→HALLWAY_A":   "LEFT",
+    "ROOM_102→HALLWAY_A":   "RIGHT",
+    "ROOM_201→HALLWAY_B":   "LEFT",
+    "ROOM_202→HALLWAY_B":   "RIGHT",
+    "HALLWAY_A→HALLWAY_B":  "STRAIGHT",
+    "HALLWAY_A→STAIRCASE":  "RIGHT",
+    "HALLWAY_B→EXIT_NORTH": "STRAIGHT",
+    "STAIRCASE→EXIT_SOUTH": "STRAIGHT"
+  },
+
+  "led_devices": {
+    "ROOM_101":   { "ip": "192.168.1.101", "type": "LED", "backup": "HALLWAY_A" },
+    "ROOM_102":   { "ip": "192.168.1.102", "type": "LED", "backup": "HALLWAY_A" },
+    "ROOM_201":   { "ip": "192.168.1.103", "type": "LED", "backup": "HALLWAY_B" },
+    "ROOM_202":   { "ip": "192.168.1.104", "type": "LED", "backup": "HALLWAY_B" },
+    "HALLWAY_A":  { "ip": "192.168.1.105", "type": "LED", "backup": "HALLWAY_B" },
+    "HALLWAY_B":  { "ip": "192.168.1.106", "type": "LED", "backup": "HALLWAY_A" },
+    "STAIRCASE":  { "ip": "192.168.1.107", "type": "LED", "backup": "HALLWAY_A" }
+  },
+
+  "esp32_devices": {
+    "ESP32_SENSOR_01": { "nodeId": "ROOM_101", "type": "SENSOR", "ip": "192.168.1.201" },
+    "ESP32_SENSOR_02": { "nodeId": "ROOM_102", "type": "SENSOR", "ip": "192.168.1.202" },
+    "ESP32_SENSOR_03": { "nodeId": "ROOM_201", "type": "SENSOR", "ip": "192.168.1.203" },
+    "ESP32_SENSOR_04": { "nodeId": "ROOM_202", "type": "SENSOR", "ip": "192.168.1.204" }
+  }
+}

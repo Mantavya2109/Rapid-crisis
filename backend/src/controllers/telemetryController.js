@@ -33,11 +33,20 @@ export const ingestTelemetry = async (req, res) => {
     temperature,
     smoke,
     status,
+    systemMode,
     stateChanged  = false,
     smokeRiseRate = 0,
     tempRiseRate  = 0,
     raw,
   } = req.body || {};
+
+  // ── Handle System Telemetry (H7 fix) ─────────────────────────────────
+  if (systemMode) {
+    const ts = new Date().toISOString();
+    console.log(`[Telemetry] System Mode Transition: ${systemMode} for building "${buildingId}"`);
+    bus.fire("system:mode", { buildingId, mode: systemMode, timestamp: ts });
+    return res.status(201).json({ status: "ACK", systemMode, timestamp: ts });
+  }
 
   // ── Validate ─────────────────────────────────────────────────────────
   if (!buildingId || !nodeId || !deviceId) {

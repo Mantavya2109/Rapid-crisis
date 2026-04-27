@@ -38,19 +38,39 @@ import buildingRoutes    from "./routes/buildingRoutes.js";
 import simulationRoutes  from "./routes/simulationRoutes.js";
 import { bus }           from "./services/eventBus.js";
 import { initWriteQueue, flushNow } from "./services/firestoreWriteQueue.js";
+import { requireApiKey } from "./middleware/auth.js";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Middleware ─────────────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  process.env.FRONTEND_URL,         // production frontend
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (Pi, Postman, curl)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(null, true); // Allow all for now — restrict in production
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+}));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use("/uploads", express.static("uploads"));
 
 // ── Initialise Firestore write queue ──────────────────────────────────
 // Import db lazily to avoid crashing on missing serviceAccountKey in dev
 let _dbReady = false;
 import("../config/firebase.js")
-  .then(({ default: db }) => { initWriteQueue(db); _dbReady = true; })
+  .then(({ default: db }) => { 
+    initWriteQueue(db); 
+    import("./controllers/buildingController.js").then((m) => m.initSensorNodes(db));
+    _dbReady = true; 
+  })
   .catch((err) => console.warn("[Server] Firebase not ready:", err.message));
 
 // ─────────────────────────────────────────────────────────────────────
@@ -92,6 +112,7 @@ const SSE_EVENTS = [
   "anomaly:detected",
   "evacuation:reroute",
   "intelligence:ready",
+  "system:mode",
 ];
 
 SSE_EVENTS.forEach((eventName) => {
@@ -127,10 +148,29 @@ app.get("/health", (_req, res) =>
 );
 
 // Pi endpoints (URLs must match CLOUD_BASE_URL/* in Pi settings.py)
-app.use("/", fireRoutes);
-app.use("/", telemetryRoutes);
-app.use("/", buildingRoutes);
-app.use("/", simulationRoutes);
+// All write operations require API key; reads are public for dashboard
+app.use("/", requireApiKey, fireRoutes);
+app.use("/", requireApiKey, telemetryRoutes);
+app.use("/", requireApiKey, buildingRoutes);
+app.use("/", requireApiKey, simulationRoutes);
+
+// ── Pi-expected stub routes ────────────────────────────────────────────
+// The Pi's cloud_sync.py sends to these endpoints; provide basic handlers
+
+/** POST /led/batch — Pi sends LED commands for cloud-side routing */
+app.post("/led/batch", requireApiKey, (req, res) => {
+  const { commands } = req.body || {};
+  console.log(`[LED] Received ${(commands || []).length} LED commands from Pi`);
+  bus.fire("evacuation:reroute", { commands });
+  res.json({ status: "ACK", received: (commands || []).length });
+});
+
+/** POST /devices/register — Pi registers ESP32 devices */
+app.post("/devices/register", requireApiKey, (req, res) => {
+  const { deviceId, nodeId, buildingId } = req.body || {};
+  console.log(`[Devices] Registered ${deviceId} → ${nodeId} (${buildingId})`);
+  res.status(201).json({ status: "REGISTERED", deviceId, nodeId });
+});
 
 // ── 404 + Error handlers ──────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ message: "Endpoint not found." }));

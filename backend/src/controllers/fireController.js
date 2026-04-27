@@ -231,6 +231,16 @@ const _adjCache = new Map();
 /** In-memory edges cache { buildingId → edges[] } */
 const _edgeCache = new Map();
 
+/**
+ * Clear cached adjacency + edges for a building.
+ * Must be called after setupBuilding to avoid stale Dijkstra routing.
+ */
+export function invalidateBuildingCache(buildingId) {
+  _adjCache.delete(buildingId);
+  _edgeCache.delete(buildingId);
+  console.log(`[Fire] Cache invalidated for building "${buildingId}"`);
+}
+
 async function _fetchAdjacency(buildingId) {
   if (_adjCache.has(buildingId)) return _adjCache.get(buildingId);
 

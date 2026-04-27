@@ -1,0 +1,17 @@
+# ── Core API server ──────────────────────────────────────────────────
+flask>=3.0.0
+flask-limiter>=3.5.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# ── MQTT client (Mosquitto communication with ESP32 nodes) ───────────
+paho-mqtt>=1.6.1
+
+# ── WS2812B LED strip driver (rpi_ws281x, Pi hardware only) ─────────
+# Requires: sudo pip install rpi_ws281x  (needs root for PWM/DMA access)
+# On dev machines without GPIO this falls back to MockStrip automatically.
+# On Pi: pip install rpi_ws281x
+rpi_ws281x>=4.3.4
+PyJWT>=2.8.0
+prometheus_client>=0.19.0
+pydantic>=2.0.0

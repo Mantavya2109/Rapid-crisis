@@ -1,0 +1,14 @@
+# Smart Fire Evacuation System — .gitignore
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+logs/
+*.log
+.DS_Store
+.pytest_cache/
+*.egg-info/
+dist/
+build/
